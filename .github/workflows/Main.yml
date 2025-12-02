@@ -5,30 +5,22 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  # Adding the workflow_dispatch allows manual triggering
   workflow_dispatch:
 
-# --- START OF JOBS DEFINITION ---
 jobs:
-  # 'build' is the name of our job
   build:
+    name: Build
     runs-on: ubuntu-latest
-    
-    # 'steps' defines the sequence of tasks in the 'build' job
     steps:
-      # 1. Standard: Check out the repository code
-      - uses: actions/checkout@v4
-      
-      # 2. Critical: Set up the Lean 4 environment
-      - name: Setup Lean Toolchain
-        uses: leanprover/setup-lean@v1
-        with:
-          version: '4.26.0-rc2' # Ensure this matches your lakefile.toml
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      # 3. Essential: Build and Verify Proof
-      - name: Build and Verify Proof
+      - name: Install Elan (Lean Version Manager)
         run: |
-          # Ensure all Mathlib dependencies are present
-          lake update
-          # Compile the project and check for errors
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Build Project
+        run: |
+          lake exe cache get || true # Try to fetch mathlib cache (speeds it up), ignore if fails
           lake build
