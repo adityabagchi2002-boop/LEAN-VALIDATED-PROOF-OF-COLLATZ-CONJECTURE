@@ -1,25 +1,15 @@
 name: CI
-
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
-
+on: [push]
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Lean Toolchain
-        uses: leanprover/setup-lean@v1
-        with:
-          version: '4.26.0-rc2'
-
-      - name: Build and Verify Proof
+      - name: Install Elan
         run: |
-          lake update
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+      - name: Build
+        run: |
+          lake exe cache get || true
           lake build
