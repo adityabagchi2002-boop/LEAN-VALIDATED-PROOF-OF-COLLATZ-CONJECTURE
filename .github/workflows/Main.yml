@@ -1,9 +1,5 @@
 name: CI
-
-on:
-  push:
-    branches: ["main"]
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
   build:
@@ -12,9 +8,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build and Check
-        uses: leanprover/lean-action@v1
-        with:
-          # This automatically installs the version in lean-toolchain
-          # and runs 'lake build'
-          build_args: ""
+      - name: Run Full Build Script
+        run: |
+          # 1. Install Elan (The Lean Version Manager) manually
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          
+          # 2. Add Elan to the PATH for this step immediately
+          export PATH="$HOME/.elan/bin:$PATH"
+          
+          # 3. Verify installation
+          lean --version
+          
+          # 4. Update Dependencies
+          lake update
+          
+          # 5. Fetch Mathlib Cache (Crucial for speed, prevents timeouts)
+          # We use '|| true' so the build continues even if cache fetching has a hiccup
+          lake exe cache get || true
+          
+          # 6. Build the Proof
+          lake build
