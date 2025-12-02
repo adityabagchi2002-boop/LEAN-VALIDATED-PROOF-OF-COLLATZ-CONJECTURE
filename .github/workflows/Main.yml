@@ -33,11 +33,26 @@ steps:
           
       # (Optional: Add a deployment step here to publish documentation or artifacts)
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
+# ... (Around Line 17)
 jobs:
-  # This workflow contains a single job called "build"
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
+    
+    # [START HERE]
+    steps:    <--- Must be indented under 'build:'
+      # 1. Standard: Check out the repository code
+      - uses: actions/checkout@v4
+      
+      # 2. Critical: Set up the Lean 4 environment...
+      - name: Setup Lean Toolchain
+        uses: leanprover/setup-lean@v1
+        with:
+          version: '4.26.0-rc2' # Use the version you specified previously
+      
+      # 3. Essential: Build and Verify Proof
+      - name: Build and Verify Proof
+        run: |
+          lake update 
+          lake build
     
