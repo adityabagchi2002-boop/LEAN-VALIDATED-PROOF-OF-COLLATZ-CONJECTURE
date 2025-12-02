@@ -7,20 +7,20 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-# THIS 'jobs' KEY IS WHAT WAS MISSING OR BROKEN
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Lean Toolchain
-        uses: leanprover/setup-lean@v1
-        with:
-          version: '4.26.0-rc2'
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Build and Verify Proof
+      - name: Install Elan (Lean Version Manager)
         run: |
-          lake update
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Build Project
+        run: |
+          # Attempt to get cache to speed up build, but don't fail if it misses
+          lake exe cache get || true
           lake build
