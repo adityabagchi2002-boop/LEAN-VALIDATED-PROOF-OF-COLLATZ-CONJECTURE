@@ -1,58 +1,34 @@
-# This is a basic workflow to help you get started with Actions
-
 name: CI
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-
-  # Allows you to run this workflow manually from the Actions tab
+  # Adding the workflow_dispatch allows manual triggering
   workflow_dispatch:
-steps:
-      # 1. Standard: Check out the repository code
-      - uses: actions/checkout@v4
-      
-      # 2. Critical: Set up the Lean 4 environment using the version specified in lakefile.toml
-      # Note: This version must match the rev='...' in your lakefile.toml.
-      - name: Setup Lean Toolchain
-        uses: leanprover/setup-lean@v1
-        with:
-          version: '4.26.0-rc2' # Use the version you specified previously
 
-      # 3. Essential: Download Mathlib and compile the project (The proof)
-      - name: Build and Verify Proof
-        run: |
-          # Ensure all Mathlib dependencies are present
-          lake update 
-          # Compile the project and check for errors
-          lake build
-          
-      # (Optional: Add a deployment step here to publish documentation or artifacts)
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
-# ... (Around Line 17)
+# --- START OF JOBS DEFINITION ---
 jobs:
+  # 'build' is the name of our job
   build:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
     
-    # [START HERE]
-    steps:    <--- Must be indented under 'build:'
+    # 'steps' defines the sequence of tasks in the 'build' job
+    steps:
       # 1. Standard: Check out the repository code
       - uses: actions/checkout@v4
       
-      # 2. Critical: Set up the Lean 4 environment...
+      # 2. Critical: Set up the Lean 4 environment
       - name: Setup Lean Toolchain
         uses: leanprover/setup-lean@v1
         with:
-          version: '4.26.0-rc2' # Use the version you specified previously
-      
+          version: '4.26.0-rc2' # Ensure this matches your lakefile.toml
+
       # 3. Essential: Build and Verify Proof
       - name: Build and Verify Proof
         run: |
-          lake update 
+          # Ensure all Mathlib dependencies are present
+          lake update
+          # Compile the project and check for errors
           lake build
-    
