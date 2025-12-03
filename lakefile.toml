@@ -1,18 +1,13 @@
-name = "Collatz LEAN"
-version = "0.1.0"
-keywords = ["math"]
-defaultTargets = ["«Collatz LEAN»"]
+name = "CollatzProof"
 
-[leanOptions]
-pp.unicode.fun = true # pretty-prints `fun a ↦ b`
-relaxedAutoImplicit = false
-weak.linter.mathlibStandardSet = true
-maxSynthPendingDepth = 3
+[package]
+name = "CollatzProof"
 
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.26.0-rc2"
 
 [[lean_lib]]
-name = "«Collatz LEAN»"
+name = "CollatzProof"
+# This line tells Lake to look for CollatzLEAN_FINAL.lean
+roots = #[`CollatzLEAN_FINAL]
