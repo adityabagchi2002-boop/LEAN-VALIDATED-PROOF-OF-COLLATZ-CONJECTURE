@@ -10,4 +10,4 @@ scope = "leanprover-community"
 [[lean_lib]]
 name = "CollatzProof"
 # This line tells Lake to look for CollatzLEAN_FINAL.lean
-roots = #[`CollatzLEAN_FINAL]
+roots = ["CollatzLEAN_FINAL"]
