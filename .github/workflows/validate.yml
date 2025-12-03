@@ -1,0 +1,45 @@
+name: Lean Validation
+
+on:
+  # Trigger the workflow on push or pull request to main
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+# Cancel previous runs if a new commit is pushed to save resources
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out your code
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # 2. Install Lean 4 using your lean-toolchain file
+      - name: Install Elan (Lean Version Manager)
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      # 3. Verify Lean version
+      - name: Check Lean version
+        run: lean --version
+
+      # 4. Fetch the Mathlib cache (Crucial for speed!)
+      # This downloads pre-compiled proofs for Mathlib so you don't rebuild the universe.
+      - name: Get Mathlib Cache
+        run: lake exe cache get || echo "Mathlib cache not found or not needed"
+
+      # 5. Build the project
+      # This runs the verification. If this passes, your proofs are valid.
+      - name: Build Project
+        run: lake build
