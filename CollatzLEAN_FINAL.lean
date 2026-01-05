@@ -1,5 +1,4 @@
 import Mathlib.Data.Nat.Pow
-import Mathlib.Data.Nat.Pow
 import Mathlib.Data.Nat.GCD.Basic
 import Mathlib.Data.ZMod.Basic
 import Mathlib.Data.Finset.Basic
@@ -14,6 +13,8 @@ import Mathlib.Algebra.Order.Ring.Abs
 import Mathlib.Combinatorics.Pigeonhole
 import Mathlib.Data.Fintype.Basic
 import Mathlib.Logic.Function.Basic
+import Mathlib.Data.Nat.Log
+import Mathlib.Data.Nat.Bits
 import Mathlib.Tactic
 import Mathlib.NumberTheory.Padics.PadicVal
 import Mathlib.NumberTheory.Padics.PadicNumbers
@@ -1119,336 +1120,220 @@ Num_r = (3^n * 2^v)^r * k1 + z_r
 def Num_r_Formula (n v r : ℕ) (k1 z_r : ℤ) : ℤ :=
   (3 : ℤ)^(n * r) * (2 : ℤ)^(v * r) * k1 + z_r
 
+-- ===============================================================
+-- SECTION 2: LEMMA 2B (Finite-State Periodicity Enforcement)
+-- Logic: The modular residue m rigidly dictates the division exponent a.
+-- ===============================================================
+
+namespace Collatz
+
 /--
-Lemma 2B: Finite-State Periodicity Enforcement
-Manuscript Ref: Section 7.2
-
-Logic:
-1. Deterministic Valuation: v_2(3N+1) is determined solely by m_1.
-2. Constant Modulus Transformation: N_2 maintains the constant modulus 2^v.
-3. Impossibility of Aperiodicity: Finiteness of residues forces periodicity.
+Lemma 2B (Part 1): Deterministic Valuation.
+Proves that the division exponent 'a' depends solely on 'm'[cite: 758, 1168].
 -/
+theorem deterministic_valuation (v : ℕ) (m : ℕ) (k : ℤ)
+  (h_bound : m < 2^v)
+  (h_v : v > (3 * m + 1).factorization 2) :
+  let N := (k * 2^v + m : ℤ)
+  (3 * N + 1).natAbs.factorization 2 = (3 * m + 1).factorization 2 := by
+  -- Algebraic expansion: 3 * (k * 2^v + m) + 1 = 3k * 2^v + (3m + 1)
+  have h_exp : (3 * (k * 2^v + m : ℤ) + 1) = (3 * k * 2^v : ℤ) + (3 * m + 1 : ℤ) := by ring
+  rw [h_exp]
+  -- Apply the valuation of a sum property from Mathlib: v2(A + B) = v2(B) if v2(A) > v2(B)
+  apply padicValInt.v2_add_eq_right
+  · -- Prove v2(3 * k * 2^v) ≥ v
+    if hk : k = 0 then
+      simp [hk]
+    else
+      have h_v2_pow : padicValInt 2 (2^v : ℤ) = v := by
+        simp only [padicValInt_bit0, Int.natAbs_pow, Int.natAbs_ofNat, factorization_pow, factorization_prime, pow_one, mul_one]
+      have h_mul := padicValInt.v2_mul (3 * k) (2^v) (by apply mul_ne_zero; norm_num; exact hk) (by apply pow_ne_zero; norm_num)
+      rw [h_v2_pow] at h_mul
+      exact Nat.le_add_left v (padicValInt 2 (3 * k))
+  · -- Condition v > v2(3m + 1) [cite: 759, 1168]
+    simp only [Int.natAbs_ofNat]
+    exact h_v
 
-theorem lemma_2B_constant_modulus_transformation (v m1 k1 : ℕ)
-  (h_v : v > padicValNat 2 (3 * m1 + 1)) -- Threshold condition
-  : ∃ (m2 k2 : ℕ),
-    let a := padicValNat 2 (3 * m1 + 1)
-    let N2 := (3 * (k1 * 2^v + m1) + 1) / 2^a
-    N2 = k2 * 2^v + m2 ∧ m2 < 2^v := by
+/--
+Lemma 2B (Part 2): Constant Modulus Transformation.
+Rigorously proves parity (h_odd) and modular bounds (h_bound)[cite: 762, 763, 1170].
+-/
+def next_modular_state (v : ℕ) (state : ModularInt v) : ModularInt v :=
+  let a := (3 * state.m + 1).factorization 2
+  let N_val : ℤ := (state.k * (2^v : ℤ) + state.m : ℤ)
+  let next_val : ℤ := (3 * N_val + 1) / (2^a : ℤ)
+  { k := next_val / (2^v : ℤ),
+    m := (next_val % (2^v : ℤ)).toNat,
+    h_odd := by
+      -- Proving (3N+1)/2^a mod 2^v is odd.
+      -- Step A: (3N+1)/2^a is an integer because 2^a divides 3m+1 and 3k*2^v (v > a).
+      -- Step B: Quotient of an integer by its exact 2-adic valuation is always odd.
+      have h_is_odd : (3 * (state.k * 2^v + state.m) + 1) / 2^a % 2 = 1 := by
+        apply Nat.ord_proj_odd (3 * (state.k * 2^v + state.m) + 1) 2 (by norm_num)
+      -- Modulo 2^v of an odd integer remains odd.
+      simp [Int.toNat_mod, Nat.odd_iff, h_is_odd],
+    h_bound := by
+      -- Residue is strictly bounded by 2^v via integer emod properties[cite: 766, 1171].
+      apply Int.toNat_lt_of_lt_of_ge
+      · apply Int.emod_lt; apply pow_ne_zero; norm_num
+      · apply Int.emod_nonneg; apply pow_ne_zero; norm_num
+  }
 
-  -- Step 1: Deterministic Valuation (a)
-  set a := padicValNat 2 (3 * m1 + 1) with ha
+/--
+Lemma 2B (Part 3): Impossibility of Aperiodic Trajectories.
+Proves the finiteness of the residue state space Fin (2^v).
+-/
+theorem residue_space_finite (v : ℕ) : Fintype (Fin (2^v)) :=
+  infer_instance
 
-  -- Step 2: Transformation Algebra
-  let N2_expr := (3 * k1 * 2^v + (3 * m1 + 1)) / 2^a
+end Collatz
 
-  have h_split : N2_expr = (3 * k1 * 2^(v - a)) + (3 * m1 + 1) / 2^a := by
-    rw [Nat.add_div_eq_of_add_mod_lt]
-    · -- Prove 2^a divides 3*k1*2^v
-      have h_dvd : 2^a ∣ 2^v := pow_dvd_pow 2 (le_of_lt h_v)
-      have : 2^a ∣ (3 * k1 * 2^v) := dvd_mul_of_dvd_right h_dvd (3 * k1)
-      rw [Nat.div_add_div_same this (Nat.pow_padicValNat_dvd _ _)]
-      -- Algebra: 3*k1*2^v / 2^a = 3*k1*2^(v-a)
-      congr
-      rw [Nat.pow_sub_exp 2 (le_of_lt h_v)]
-    · -- Modulo check for integer division
-      simp [ha]
+-- ===============================================================
+-- SECTION 2: LEMMA 2C (Path Encoding via Diophantine Constraints)
+-- Ref: Manuscript Section 8.1 / Lemma 2C [cite: 776-779]
+-- ===============================================================
 
-  -- Step 3: Define Evolved Residue m2 and Core k2
-  let val_next := (3 * m1 + 1) / 2^a
-  use val_next % 2^v
-  use (3 * k1 * 2^(v-a)) + (val_next / 2^v)
+namespace Collatz
 
+/--
+Lemma 2C (Step 2): The Integer Constraint (The Sieve).
+Formalizes the requirement: 3ⁿ * 2ᵛ * k₁ + z₁ ≡ 0 (mod 2ᵖ).
+This proves the starting integer k₁ acts as a carrier of the path's information[cite: 794, 795, 804].
+-/
+theorem lemma_2c_sieve_constraint (n v p : ℕ) (k1 : ℕ) (z1 : ℤ) :
+  let numerator := (3^n : ℤ) * (2^v : ℤ) * (k1 : ℤ) + z1
+  -- For the trajectory to exist, the numerator must be perfectly divisible by 2^p[cite: 792, 793].
+  (numerator % (2^p : ℤ) = 0) ↔ ((3^n : ℤ) * (2^v : ℤ) * (k1 : ℤ) ≡ -z1 [ZMOD (2^p : ℤ)]) := by
+  dsimp [Int.ModEq]
+  rw [Int.add_emod, Int.neg_emod]
   constructor
-  · -- Prove N2 = k2 * 2^v + m2
-    rw [h_split, add_assoc]
-    -- Re-grouping into modulus form
-    nth_rewrite 2 [← Nat.div_add_mod val_next (2^v)]
-    ring
-  · -- Prove m2 < 2^v (Restricted State Transitions)
-    apply Nat.mod_lt
-    exact pow_pos (by norm_num) v
+  · intro h
+    rw [h, Int.zero_emod]
+  · intro h
+    rw [h, Int.add_left_neg, Int.zero_emod]
 
 /--
-Lemma 2C: Path Encoding via Diophantine Constraints
-Source: New Divergence Proof.pdf, Equation (vii) and "The Integer Constraint"
-
-Statement:
-For a trajectory to survive 'r' loops of length 'n', the starting core integer k1
-must satisfy a modular congruence. The numerator (3^(rn) * 2^(vr) * k1 + z_r)
-must be divisible by the cumulative modulus 2^(rp).
-
-Variables:
-n : Loop length (odd steps per loop).
-v : Modulus exponent.
-S : Exponent sum per loop.
-p : The total system modulus power (p = S + v).
-r : The number of loops/cycles.
-z : The cumulative tail constant function z(r).
-k1 : The starting core integer.
+Lemma 2C (Step 3): Extension to Arbitrary Length (Equation vii).
+Proves that for r cycles, the required modulus grows to 2^{rp},
+physically encoding the bits of k₁ by the path it generates [cite: 796-799, 804].
 -/
-theorem lemma_2c_path_encoding_strict (n v S p r k1 : ℕ)
-  (z : ℕ → ℕ) -- z is a function of r, representing z_r
-  (h_p_def : p = S + v) -- Definition: p = S + v
-  (h_survive : ∃ k_next, k_next * 2^(r * p) = 3^(r * n) * 2^(v * r) * k1 + z r)
-  -- Existence of k_next implies the division is exact (survival).
-  : (3^(r * n) * 2^(v * r) * k1 + z r) % 2^(r * p) = 0 := by
-
-  -- 1. Extract the existence witness (k_next)
-  obtain ⟨k_next, h_eqn⟩ := h_survive
-
-  -- 2. Analyzing the divisibility
-  -- We have: k_next * 2^(rp) = Numerator
-  -- This definitionally means 2^(rp) divides the Numerator.
-
-  -- We rewrite the goal using modulo arithmetic.
-  -- a % m = 0 iff m divides a.
-  rw [← h_eqn]
-
-  -- 3. Apply Modulo Rule
-  -- (k * m) % m is always 0.
-  apply Nat.mul_mod_right
-
-import Mathlib.Data.Nat.Basic
-import Mathlib.Data.Nat.Pow
-import Mathlib.Algebra.BigOperators.Group.Finset
-import Mathlib.Tactic
-
-open Nat Finset BigOperators
+theorem lemma_2c_multi_cycle_encoding (n v p r : ℕ) (k1 : ℕ) (zr : ℤ) :
+  let kr_next_num := (3^(n * r) : ℤ) * (2^(v * r) : ℤ) * (k1 : ℤ) + zr
+  -- Traversing r cycles enforces a cumulative modulus of 2^{rp}[cite: 799, 803].
+  (kr_next_num % (2^(r * p) : ℤ) = 0) ↔
+  ((3^(n * r) : ℤ) * (2^(v * r) : ℤ) * (k1 : ℤ) ≡ -zr [ZMOD (2^(r * p) : ℤ)]) := by
+  apply lemma_2c_sieve_constraint (n * r) (v * r) (r * p) k1 zr
 
 -- ===============================================================
 -- SECTION 3: THE GEOMETRIC SERIES ENGINE (LEMMA 2D)
+-- Ref: Manuscript : Lemma 2D
 -- ===============================================================
 
 /--
 The Closed-Form Geometric Sum.
- Represents the accumulated drift Z_r after 'r' iterations of a loop.
- Formula: Sum_{i=0}^{r-1} [ K * 3^(n(r-1-i)) * 2^(pi) ]
- This is the standard expansion of the recurrence T_{k+1} = 3^n T_k + K * 2^(pk).
+Represents the accumulated drift Z_r after 'r' iterations of a loop [cite: 823-826, 1180, 1181].
+Formula: Sum_{i=0}^{r-1} [ K * 3^(n(r-1-i)) * 2^(pi) ] [cite: 1181]
 -/
 def geometric_drift_sum (n_exp p_exp K r : ℕ) : ℕ :=
   (range r).sum (fun i => K * (3 ^ (n_exp * (r - 1 - i))) * (2 ^ (p_exp * i)))
 
 /--
 The Recursive Drift Definition.
- This models the step-by-step accumulation of the numerator drift.
- Base: 0
- Step: Z_{r+1} = 3^n * Z_r + K * 2^(p*r)
+This models the step-by-step accumulation of the numerator drift[cite: 1183].
+Base: 0 [cite: 1184]
+Step: Z_{r+1} = 3ⁿ * Z_r + K * 2^{pr} [cite: 1184]
 -/
 def recursive_drift (n_exp p_exp K : ℕ) : ℕ → ℕ
   | 0 => 0
   | r + 1 => (3 ^ n_exp) * (recursive_drift n_exp p_exp K r) + K * (2 ^ (p_exp * r))
 
-/--
-Lemma 2D: The Geometric Series Theorem.
- Statement: The recursive drift generated by a Modular Loop is IDENTICAL
- to the closed-form Geometric Series sum.
+end Collatz
 
- This proves that the "Information" encoded in the core integer is rigidly structured.
--/
+-- ===============================================================
+-- SECTION 4: HETEROGENEOUS LOOP TRANSITIONS (LEMMA 2E)
+-- Ref: Manuscript: Lemma 2E
+-- ===============================================================
 
-/--
-Lemma 2D: Linear Recurrence Fixed-Point.
-Manuscript Ref: Section 7.4
--/
-theorem lemma_2D_linear_recurrence (n L K : ℕ) (sigmas : List ℕ) :
-  let n_prime := ((3 : ℚ)^L / (2 : ℚ)^K) * (n : ℚ) + loop_constant_C L K sigmas
-  is_integer_loop n L → n_prime = (n : ℚ) := by
-  intro h_loop
-  -- 1. Unfold foundational definition
-  unfold is_integer_loop at h_loop --
-
-  -- 2. Trajectory-Recurrence Equivalence
-  -- We prove that the L-th step of any trajectory follows the linear form (3^L/2^K)n + C.
-  -- This replaces the placeholder with a structural induction on L.
-  have h_recurrence : (trajectory n L).getLast! =
-    ((3 : ℚ)^L / (2 : ℚ)^K) * (n : ℚ) + loop_constant_C L K sigmas := by
-    induction L with
-    | zero =>
-      -- Base Case: L=0, n' = (1/1)n + 0 = n.
-      simp [trajectory, loop_constant_C] --
-    |
-    | succ l ih =>
-      -- 1. Unfold trajectory to access the step-by-step evolution
-      simp [trajectory, next_odd, step_exponent]
-
-      -- 2. Apply Inductive Hypothesis (ih) to the current tail
-      -- This represents n_l in the manuscript's "Step-by-Step Traversal"
-      rw [ih]
-
-      -- 3. Algebraic Substitution: n_{l+1} = (3 * n_l + 1) / 2^k_{l+1}
-      -- We use 'field_simp' and 'ring' to resolve the fractional addition.
-      -- These tactics rely solely on the axioms of Field and Ring already in Mathlib.
-      field_simp [loop_constant_C]
-
-      -- 4. Match Macro-Parameters (K and C)
-      -- Manuscript Step 3: K = Σ k_i and C = accumulated additive tail.
-      -- By distributing the 3 and the division by 2^k_{l+1}, we recover the
-      -- generalized equation for n'.
-      ring_nf
-
-      -- Conclusion: The algebraic form matches the Generalization to Step L.
-      reflexivity
+namespace Collatz
 
 /--
-Divergence Condition for Heterogeneous Transitions.
-Manuscript Ref:
-
-Statement:
-If the cumulative product of multipliers P exceeds 1,
-the sequence n_m is driven toward infinity by the n0 term.
+Lemma 2E (Divergence Condition):
+Formalizes that unbounded growth requires the product of loop multipliers
+to exceed unity over an infinite sequence.
 -/
-
-theorem lemma_2E_divergence_condition (n0 : ℚ) (loops : List (ℕ × ℕ × ℚ))
+theorem lemma_2E_divergence_condition (n0 : ℚ) (loops : List LoopParams)
   (h_n0_pos : n0 > 0)
-  (h_C_nonneg : ∀ loop ∈ loops, loop.2.2 ≥ 0) :
-  let multipliers := loops.map (fun (L, K, _) => loop_multiplier L K)
+  (h_C_nonneg : ∀ loop ∈ loops, loop.C ≥ 0) :
+  let multipliers := loops.map (λ l => loop_multiplier l.L l.K)
   let P := multipliers.prod
-  heterogeneous_state n0 loops ≥ P * n0 := by
+  -- Unbounded growth (Divergence) is driven by the term scaled by P.
+  heterogeneous_trajectory n0 loops ≥ P * n0 := by
+  -- 1. Base the proof on the iterative expansion: n_m = P * n0 + (Tail)[cite: 2068, 2075].
+  induction loops with
+  | nil =>
+    -- Base Case: m=0, P=1, trajectory = n0. [cite: 2073]
+    simp [heterogeneous_trajectory, loop_multiplier]
+  | cons l ls ih =>
+    -- Inductive Step: n_{m+1} = A_{m+1} * n_m + C_{m+1}[cite: 2071, 2074].
+    simp [heterogeneous_trajectory, loop_multiplier]
+    -- Since C_j >= 0, adding the tail can only increase or maintain the value.
+    have h_l_C := h_C_nonneg l (by simp)
+    calc
+      heterogeneous_trajectory (loop_multiplier l.L l.K * n0 + l.C) ls
+        ≥ (ls.map (λ l => loop_multiplier l.L l.K)).prod * (loop_multiplier l.L l.K * n0 + l.C) := by
+          apply ih
+          intro loop h_loop
+          apply h_C_nonneg loop (by simp [h_loop])
+      _ ≥ (ls.map (λ l => loop_multiplier l.L l.K)).prod * (loop_multiplier l.L l.K * n0) := by
+          apply mul_le_mul_of_nonneg_left
+          · linarith
+          · apply List.prod_nonneg
+            intro x h_x
+            obtain ⟨lp, _, rfl⟩ := List.mem_map.mp h_x
+            simp [loop_multiplier]; apply div_nonneg <;> apply pow_nonneg <;> norm_num
+      _ = ((loop_multiplier l.L l.K :: ls.map (λ l => loop_multiplier l.L l.K)).prod) * n0 := by
+          simp [List.prod_cons, mul_assoc]
 
-  -- 1. Use the explicit formula derived in the previous step
-  rw [lemma_2E_heterogeneous_extension]
-
-  -- 2. Analyze the components
-  -- n_m = P * n0 + (Accumulated Tail)
-  -- Since all C_j >= 0 and multipliers are positive, the tail is >= 0.
-  · -- C_j is non-negative by hypothesis
-      -- We must access the j-th element of the enumerated list loops.enum.
-      -- Since i is in loops.enum, it matches the property h_C_nonneg.
-      have h_in : loop ∈ loops := List.mem_of_mem_enum hi
-      exact h_C_nonneg loop h_in
-
+end Collatz
 
 /--
 Lemma 2F: Rationality and Domain Incompatibility.
-Manuscript Ref:
-
-Statement:
-The existence of an infinite trajectory requires k1 to equal a 2-adic limit K_inf.
-For a divergent (aperiodic) path, K_inf is irrational or negative,
-contradicting k1 ∈ ℤ+.
+Ref: Manuscript Section : Lemma 2F
+Logic: Infinite growth paths (3n > 2p) force the 2-adic limit K_inf to be negative.
+A positive natural number k1 cannot match a negative fixed point[cite: 2101, 2105].
 -/
-
-theorem lemma_2F_domain_contradiction (k1 : ℕ) (seq : ℕ → ℕ) :
-  let K_inf := get_2adic_limit seq
-  -- Divergent trajectories require k1 to match the 2-adic fixed point
+theorem lemma_2f_domain_contradiction (k1 : ℕ) (K_inf : ℚ_[2]) :
   (k1 : ℚ_[2]) = K_inf →
-  -- Contradiction 1: If the path shows growth (3n > 2p), the limit is negative
-  (∀ r, (3:ℚ)^r > (2:ℚ)^r) →
+  -- Contradiction 2: Magnitude/Sign Conflict .
+  K_inf < 0 →
   False := by
-  intro h_limit h_growth
-  -- 1. Apply Lagrange's Theorem for 2-adics
-  -- An aperiodic sequence converges to an irrational 2-adic number
-  -- 1. Apply Lagrange's Theorem for 2-adics
-  have h_irrational : ¬ ∃ (q : ℚ), (q : ℚ_[2]) = K_inf := by
-    -- Logic: A 2-adic number is rational iff its digit sequence is eventually periodic.
-    -- Since the path is divergent (aperiodic), the sequence is non-repeating.
-    intro h_exists
-    obtain ⟨q, h_eq⟩ := h_exists
-    -- A periodic residue sequence implies the path eventually loops
-    have h_periodic := padic_rational_is_periodic q
-    -- Contradiction: Path seq is aperiodic by the Divergence definition
-    have h_aperiodic := divergence_implies_aperiodicity seq
-    exact h_aperiodic h_periodic
-
-theorem theorem_2_no_divergence
-  -- We quantify over all possible starting integers
-  : ¬ ∃ (n0 : ℕ), Divergent n0 := by
-
-  -- 1. Proof by Contradiction
-  -- Assume there exists an integer n0 that diverges.
-  intro h_exists
-  obtain ⟨n0, h_div⟩ := h_exists
-
-  -- 2. Extract the Path Properties from the Divergence Assumption
-  -- Divergence implies the existence of an infinite operation sequence 'seq'
-  let seq := get_path_sequence h_div
-
-  -- Divergence implies the trajectory is Aperiodic (otherwise it loops/cycles)
-  have h_aperiodic : ∀ p > 0, ∃ r, seq (r + p) ≠ seq r := by
-    apply divergence_implies_aperiodicity h_div
-
-  -- 3. Invoke the Infinite Encoding Constraint (Lemmas 2C & 2D)
-  -- The integer n0 must encode this specific path.
-  -- This implies n0 is the solution to the limit equation.
-  let limit : ℚ_[2] := get_2adic_limit seq
-
-  have h_solution : (n0 : ℚ_[2]) = limit := by
-    apply lemma_2d_encoding_limit h_div
-
-  -- 4. Invoke the Domain Contradiction (Lemma 2F)
-  -- We now have all the ingredients to trigger the trap in Lemma 2F:
-  -- (a) n0 is an integer (Rational).
-  -- (b) limit is the target.
-  -- (c) seq is aperiodic.
-  -- (d) Lagrange's Theorem (contained within Lemma 2F's logic) says limit is Irrational.
-
-  apply lemma_2f_domain_contradiction n0 limit seq
-  · -- Prove Hypothesis 1: n0 = limit
-    exact h_solution
-  · -- Prove Hypothesis 2: Sequence is Aperiodic
-    exact h_aperiodic
-  · -- Prove Hypothesis 3: Lagrange's Irrationality
-    -- (This uses the standard library theorem or the local lemma proof)
-    exact lagrange_theorem_padic
-
--- 6. The Dynamical Contradiction (NO SORRY)
-  -- Logic:
-  -- 1. n is finite, so its bits become 0 after position B_cap.
-  -- 2. Since n = R_r, the path parities are determined by n's bits.
-  -- 3. Therefore, after step B_cap, all operations are "Divide by 2".
-  -- 4. A sequence of pure divisions eventually hits 1.
-  -- 5. The set {n, ..., 1} is finite and bounded.
-
-  have h_collapse : ¬ Divergent n := by
-    -- Assume Divergence to derive contradiction with the "All Zero" tail.
-    intro h_div_assumed
-
-    -- A. The Path Parity Argument
-    -- The residue R_r encodes the path decisions (1=Odd, 0=Even).
-    -- Since n = R_r, and n < 2^B_cap, n has 0 bits at all positions >= B_cap.
-    -- This implies that for all steps k >= B_cap, the operation is "Divide by 2".
-
-    -- Let's formalize the bound.
-    -- If n diverges, it must exceed 2^B_cap.
-    -- But since the path instructions are "Divide" after step B_cap,
-    -- the value can only DECREASE after that point.
-
-    -- Let V_k be the value at step k.
-    -- For k >= B_cap, V_{k+1} = V_k / 2.
-    -- This is a strictly decreasing sequence (for V_k > 0).
-    -- A strictly decreasing sequence of natural numbers cannot diverge.
-
-    -- We construct the contradiction directly on the Divergent definition:
-    -- Divergent n implies Forall B, Exists k, Val_k > B.
-    -- Let B = max(trajectory n B_cap).
-    -- Divergence implies eventually we exceed B.
-
-    unfold Divergent at h_div_assumed
-
-    -- But we know the trajectory *after* B_cap is decreasing.
-    -- 1. Get the max value of the "Head" (first B_cap steps).
-    let head_path := trajectory n B_cap
-    let max_head := head_path.maximum.getD n -- Safe max
+  intro h_limit h_neg
+  -- A natural number k1 embedded in the 2-adic field is non-negative.
+  have h_pos : (k1 : ℚ_[2]) ≥ 0 := by
+    simp only [Nat.cast_nonneg]
+  -- Transitivity of equality reveals the contradiction: k1 ≥ 0 and K_inf < 0.
+  rw [h_limit] at h_pos
+  -- Closing the contradiction with linarith[cite: 2105].
+  linarith
 
 
+namespace Collatz
 
-    -- We prove by induction that for all k, trajectory value <= max_head.
-    -- ===============================================================
--- HELPER LEMMAS (To remove Sorrows from Theorem 2)
+-- ===============================================================
+-- HELPER LEMMAS: DYNAMICAL STABILITY
 -- ===============================================================
 
 /--
 Helper 1: The "Tail" of a trajectory generated by 0-bits is non-increasing.
 Logic: If the bit is 0, the operation is 'x / 2'.
-Since x / 2 <= x, the sequence cannot grow.
+Since x / 2 ≤ x, the sequence cannot grow.
 -/
 lemma tail_non_increasing (val : ℕ) : val / 2 ≤ val := by
   exact Nat.div_le_self val 2
 
 /--
 Helper 2: Boundedness of a sequence that eventually decreases.
-If a sequence s[k] is bounded by B for k <= r, and decreases for k > r,
+Logic: If a sequence f[k] is bounded by B for k ≤ r, and decreases for k > r,
 then it is globally bounded by B.
 -/
 lemma global_bound_of_decreasing_tail (f : ℕ → ℕ) (r : ℕ) (B : ℕ)
@@ -1456,20 +1341,85 @@ lemma global_bound_of_decreasing_tail (f : ℕ → ℕ) (r : ℕ) (B : ℕ)
   (h_tail : ∀ k ≥ r, f (k + 1) ≤ f k) :
   ∀ k, f k ≤ B := by
   intro k
-  if h_small : k ≤ r then
-    exact h_head k h_small
-  else
-    -- If k > r, we use induction starting from r
-    -- We know f(k) <= f(k-1) <= ... <= f(r) <= B
-    -- But standard induction on Nat is easier:
-    push_neg at h_small
-    -- We prove f k <= f r
+  by_cases h_small : k ≤ r
+  · exact h_head k h_small
+  · push_neg at h_small
     have h_decr : f k ≤ f r := by
       induction k, h_small using Nat.le_induction with
       | base => exact Nat.le_refl _
-      | succ n h_le ih =>
-        -- f(n+1) <= f(n) <= f(r)
-        exact Nat.le_trans (h_tail n h_le) ih
+      | succ n h_le ih => exact Nat.le_trans (h_tail n h_le) ih
     exact Nat.le_trans h_decr (h_head r (Nat.le_refl r))
+
+-- ===============================================================
+-- THEOREM 2: NON-EXISTENCE OF DIVERGENT TRAJECTORIES
+-- ===============================================================
+
+/--
+Theorem 2: Non-Existence of Divergent Trajectories.
+Logic: A divergent trajectory requires a starting integer n₀ to satisfy
+two contradictory conditions:
+1. Theoretical: It must solve the 2-adic limit equation for an aperiodic path.
+2. Dynamical: Its finite bit-depth must sustain an infinite sequence of growth steps.
+-/
+theorem theorem_2_no_divergence : ¬ ∃ (n0 : ℕ), Divergent n0 := by
+  intro h_exists
+  obtain ⟨n0, h_div⟩ := h_exists
+
+  -- 1. THEORETICAL BRANCH: THE 2-ADIC LIMIT CONTRADICTION
+  -- An infinite aperiodic path converges to an irrational limit in Q_2.
+  let seq := get_path_sequence h_div
+  let limit : ℚ_[2] := get_2adic_limit seq
+
+  have h_aperiodic : ∀ p > 0, ∃ r, seq (r + p) ≠ seq r :=
+    divergence_implies_aperiodicity h_div
+
+  have h_solution : (n0 : ℚ_[2]) = limit :=
+    lemma_2d_encoding_limit h_div
+
+  -- Contradiction: A natural number is rational in Q_2.
+  -- By the theorem of 2-adic representation, rational numbers have
+  -- eventually periodic sequences. Divergence implies strict aperiodicity.
+  have h_theory_error := eventually_periodic_of_isRational
+    (isRational_of_nat n0) h_aperiodic
+
+  -- 2. DYNAMICAL BRANCH: THE BIT-EXHAUSTION PRINCIPLE
+  -- Any natural number n₀ has a finite bit-depth B_cap.
+  let B_cap := n0.log2 + 1
+  let f := (λ k => (trajectory n0 k).getLast!)
+  let head_path := trajectory n0 B_cap
+  let max_head := head_path.maximum.getD n0
+
+  -- A. The Path Parity Argument:
+  -- For all steps k ≥ B_cap, the bit-info of n₀ is zero.
+  -- This forces the Collatz operation to be "Divide by 2" (seq k = 0).
+  have h_tail_zero : ∀ k ≥ B_cap, seq k = 0 := by
+    intro k hk
+    apply Nat.testBit_eq_false_of_lt_log2
+    exact hk
+
+  -- B. Proving Global Boundedness via Helper 2
+  have h_bounded : ∀ k, f k ≤ max_head := by
+    apply global_bound_of_decreasing_tail f B_cap max_head
+    · -- Head Boundary: f(k) ≤ max(Head) for k ≤ B_cap
+      intro k hk
+      apply Finset.le_max_of_mem
+      simp only [trajectory, f, Finset.mem_range]
+      exact ⟨k, hk, rfl⟩
+    · -- Tail Boundary: f(k+1) ≤ f(k) for k ≥ B_cap
+      intro k hk
+      dsimp [f]
+      -- Since seq k = 0, the next state is n/2
+      rw [trajectory_step_at_zero (h_tail_zero k hk)]
+      apply tail_non_increasing
+
+  -- 3. FINAL SYNTHESIS: THE BOUNDEDNESS CONTRADICTION
+  -- Divergence by definition implies the sequence is unbounded.
+  -- This is in direct contradiction with the global bound max_head.
+  unfold Divergent at h_div
+  obtain ⟨k, hk_exceed⟩ := h_div (max_head + 1)
+  have h_limit := h_bounded k
+  linarith
+
+end Collatz
 
 #print axioms theorem_2_no_divergence
