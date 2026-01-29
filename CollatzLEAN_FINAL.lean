@@ -1089,32 +1089,33 @@ Defined as the exponent of 2 in the prime factorization of |z|.
 def val2 (n : ℤ) : ℕ := n.natAbs.factorization 2
 
 /--
-Lemma 2A: Fundamental Equivalence.
-Proves that the Collatz recurrence x_new = (3^n * x + T) / 2^S
-is algebraically equivalent to the Diophantine equation (2^S - 3^n)x = T.
-Ref: Manuscript
+Lemma 2A (Modified): Fundamental Equivalence for Natural Numbers.
+Proves that for any starting natural number x0, the Collatz growth recurrence
+is algebraically equivalent to the Diophantine equation in the rational field.
 -/
-theorem lemma_2A_equivalence (S : Int) (n : ℕ) (x0 T : ℚ) :
-  ((2 : ℚ) ^ S - (3 : ℚ) ^ n) * x0 = T ↔ x0 = ((3 : ℚ) ^ n * x0 + T) / (2 : ℚ) ^ S := by
+theorem lemma_2A_nat_equivalence (S : ℤ) (n : ℕ) (x0 : ℕ) (T : ℚ) :
+  ((2 : ℚ) ^ S - (3 : ℚ) ^ n) * (x0 : ℚ) = T ↔ 
+  (x0 : ℚ) = ((3 : ℚ) ^ n * (x0 : ℚ) + T) / (2 : ℚ) ^ S := by
+  -- We define a helper for the casted version of x0
+  let x_q := (x0 : ℚ)
   constructor
-  · -- Forward: Equation -> Recurrence
+  · -- Forward: (2^S - 3^n) * x_q = T  => x_q = (3^n * x_q + T) / 2^S
     intro h
-    -- (2^S - 3^n)x = T  => 2^S x = 3^n x + T
-    have h_rw : (2 : ℚ)^S * x0 - (3 : ℚ)^n * x0 = T := by
-       rw [sub_mul] at h; exact h
-    have h_iso : (2 : ℚ)^S * x0 = (3 : ℚ)^n * x0 + T := by
-       linarith
-    -- Divide by 2^S
+    have h_rw : (2 : ℚ)^S * x_q - (3 : ℚ)^n * x_q = T := by
+      rw [sub_mul] at h
+      exact h
+    have h_iso : (2 : ℚ)^S * x_q = (3 : ℚ)^n * x_q + T := by
+      linarith
+    -- Divide by 2^S to isolate x_q
     rw [h_iso]
     field_simp
-  · -- Backward: Recurrence -> Equation
+  · -- Backward: x_q = (3^n * x_q + T) / 2^S => (2^S - 3^n) * x_q = T
     intro h
-    -- x = (3^n x + T) / 2^S => 2^S x = 3^n x + T
-    have h_mul : (2 : ℚ)^S * x0 = (3 : ℚ)^n * x0 + T := by
-       rw [h]; field_simp
-    -- 2^S x - 3^n x = T => (2^S - 3^n)x = T
+    have h_mul : (2 : ℚ)^S * x_q = (3 : ℚ)^n * x_q + T := by
+      rw [h]
+      field_simp
+    -- Rearrange to the Diophantine form
     linarith
-
 /--
 The Numerator Formula for the core integer after r loops.
 Ref: Manuscript [cite: 3343] (Equation vi)
