@@ -1089,33 +1089,32 @@ Defined as the exponent of 2 in the prime factorization of |z|.
 def val2 (n : ℤ) : ℕ := n.natAbs.factorization 2
 
 /--
-Lemma 2A (Modified): Fundamental Equivalence for Natural Numbers.
-Proves that for any starting natural number x0, the Collatz growth recurrence
-is algebraically equivalent to the Diophantine equation in the rational field.
+Lemma 2A: Fundamental Equivalence.
+Proves that the Collatz recurrence x_new = (3^n * x + T) / 2^S
+is algebraically equivalent to the Diophantine equation (2^S - 3^n)x = T.
+Ref: Manuscript
 -/
-theorem lemma_2A_nat_equivalence (S : ℤ) (n : ℕ) (x0 : ℕ) (T : ℚ) :
-  ((2 : ℚ) ^ S - (3 : ℚ) ^ n) * (x0 : ℚ) = T ↔ 
-  (x0 : ℚ) = ((3 : ℚ) ^ n * (x0 : ℚ) + T) / (2 : ℚ) ^ S := by
-  -- We define a helper for the casted version of x0
-  let x_q := (x0 : ℚ)
+theorem lemma_2A_equivalence (S : Int) (n : ℕ) (x0 T : ℚ) :
+  ((2 : ℚ) ^ S - (3 : ℚ) ^ n) * x0 = T ↔ x0 = ((3 : ℚ) ^ n * x0 + T) / (2 : ℚ) ^ S := by
   constructor
-  · -- Forward: (2^S - 3^n) * x_q = T  => x_q = (3^n * x_q + T) / 2^S
+  · -- Forward: Equation -> Recurrence
     intro h
-    have h_rw : (2 : ℚ)^S * x_q - (3 : ℚ)^n * x_q = T := by
-      rw [sub_mul] at h
-      exact h
-    have h_iso : (2 : ℚ)^S * x_q = (3 : ℚ)^n * x_q + T := by
-      linarith
-    -- Divide by 2^S to isolate x_q
+    -- (2^S - 3^n)x = T  => 2^S x = 3^n x + T
+    have h_rw : (2 : ℚ)^S * x0 - (3 : ℚ)^n * x0 = T := by
+       rw [sub_mul] at h; exact h
+    have h_iso : (2 : ℚ)^S * x0 = (3 : ℚ)^n * x0 + T := by
+       linarith
+    -- Divide by 2^S
     rw [h_iso]
     field_simp
-  · -- Backward: x_q = (3^n * x_q + T) / 2^S => (2^S - 3^n) * x_q = T
+  · -- Backward: Recurrence -> Equation
     intro h
-    have h_mul : (2 : ℚ)^S * x_q = (3 : ℚ)^n * x_q + T := by
-      rw [h]
-      field_simp
-    -- Rearrange to the Diophantine form
+    -- x = (3^n x + T) / 2^S => 2^S x = 3^n x + T
+    have h_mul : (2 : ℚ)^S * x0 = (3 : ℚ)^n * x0 + T := by
+       rw [h]; field_simp
+    -- 2^S x - 3^n x = T => (2^S - 3^n)x = T
     linarith
+
 /--
 The Numerator Formula for the core integer after r loops.
 Ref: Manuscript [cite: 3343] (Equation vi)
@@ -1595,3 +1594,13 @@ theorem theorem_2_no_divergence (n0 : ℕ) (loops : List LoopParams)
 #print axioms theorem_2_no_divergence
 
 end Theorem2
+
+theorem Collatz_conjecture :
+  ∀ n : ℕ, Terminates n :=
+by
+  intro n
+  rcases collatz_exhaustive n with h | h
+  · exact h
+  · rcases h with hcyc | hdiv
+    · exact (False.elim ((Theorem1_no_integer_cycle n) hcyc))
+    · exact (False.elim ((Theorem2_no_divergence n) hdiv))
